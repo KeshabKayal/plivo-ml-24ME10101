@@ -209,10 +209,13 @@ class BPETokenizer:
         approach for large texts (avoids memory fragmentation on large arrays).
         """
         raw = text.encode("utf-8")
-        if len(raw) <= 50_000:
-            return self._encode_python(raw)
-        # Use numpy for large arrays
-        return self._encode_numpy(raw).tolist()
+        # Use numpy for large arrays, but chunk it to avoid memory limits
+        CHUNK = 50_000
+        result = []
+        for start in range(0, len(raw), CHUNK):
+            chunk = raw[start : start + CHUNK]
+            result.extend(self._encode_numpy(chunk).tolist())
+        return result
 
     def decode(self, ids: list) -> str:
         """Decode a list of token IDs back to a UTF-8 string (lossless)."""
