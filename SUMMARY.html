@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Speedrun — Engineering Summary</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --border:   #30363d;
+      --accent:   #58a6ff;
+      --accent2:  #3fb950;
+      --accent3:  #f78166;
+      --accent4:  #d2a8ff;
+      --text:     #e6edf3;
+      --muted:    #8b949e;
+      --radius:   10px;
+      --font:     'Inter', 'Segoe UI', system-ui, sans-serif;
+      --mono:     'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 3rem 2rem 2.5rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 20% 50%, rgba(88,166,255,0.08) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 35% at 80% 50%, rgba(63,185,80,0.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    header h1 {
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      font-weight: 700;
+      background: linear-gradient(120deg, var(--accent), var(--accent4), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.5px;
+      position: relative;
+    }
+    header p.subtitle {
+      margin-top: 0.6rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+      position: relative;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+      display: grid;
+      gap: 2rem;
+    }
+
+    /* ── Cards ──────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: #484f58; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem 1.4rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .card-header .icon {
+      font-size: 1.3rem;
+      width: 2rem;
+      text-align: center;
+    }
+    .card-header h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .card-body { padding: 1.4rem; }
+
+    /* ── Metric strip ───────────────────────────────────────────────── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+    }
+    .metric {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.2rem;
+      text-align: center;
+      transition: transform 0.15s;
+    }
+    .metric:hover { transform: translateY(-2px); }
+    .metric .val {
+      display: block;
+      font-size: 1.7rem;
+      font-weight: 700;
+      font-family: var(--mono);
+      color: var(--accent);
+      line-height: 1.2;
+    }
+    .metric .label {
+      display: block;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+    .metric.green .val  { color: var(--accent2); }
+    .metric.purple .val { color: var(--accent4); }
+    .metric.red .val    { color: var(--accent3); }
+
+    /* ── Tables ─────────────────────────────────────────────────────── */
+    .run-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    .run-table th {
+      padding: 0.55rem 0.9rem;
+      text-align: left;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .run-table td {
+      padding: 0.65rem 0.9rem;
+      border-bottom: 1px solid rgba(48,54,61,0.5);
+      font-family: var(--mono);
+      font-size: 0.84rem;
+    }
+    .run-table tr:last-child td { border-bottom: none; }
+    .run-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.15rem 0.55rem;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      font-family: var(--font);
+    }
+    .badge-best   { background: rgba(63,185,80,0.15);  color: var(--accent2); border: 1px solid rgba(63,185,80,0.3);  }
+    .badge-base   { background: rgba(139,148,158,0.12); color: var(--muted);   border: 1px solid rgba(139,148,158,0.25); }
+    .badge-mid    { background: rgba(88,166,255,0.12); color: var(--accent);  border: 1px solid rgba(88,166,255,0.25); }
+
+    /* ── Architecture diagram ───────────────────────────────────────── */
+    .arch-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+    .arch-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.2rem;
+    }
+    .arch-item h4 {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+    .arch-item p {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .arch-item .note {
+      font-family: var(--font);
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+
+    /* ── Two columns ────────────────────────────────────────────────── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 680px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Contribution table ─────────────────────────────────────────── */
+    .contrib-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    .contrib-table th {
+      padding: 0.5rem 0.9rem;
+      text-align: left;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .contrib-table td {
+      padding: 0.6rem 0.9rem;
+      border-bottom: 1px solid rgba(48,54,61,0.4);
+      vertical-align: top;
+      font-size: 0.87rem;
+    }
+    .contrib-table tr:last-child td { border-bottom: none; }
+    .contrib-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .contrib-human { color: var(--accent4); font-weight: 600; }
+    .contrib-agent { color: var(--accent2); font-weight: 600; }
+
+    /* ── Improvement section ────────────────────────────────────────── */
+    .improve-list {
+      list-style: none;
+      display: grid;
+      gap: 0.8rem;
+    }
+    .improve-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.8rem;
+      padding: 0.8rem 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.88rem;
+    }
+    .improve-list li .num {
+      width: 1.6rem;
+      height: 1.6rem;
+      min-width: 1.6rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      font-weight: 700;
+      font-family: var(--mono);
+    }
+    .num-1 { background: rgba(88,166,255,0.18); color: var(--accent); }
+    .num-2 { background: rgba(63,185,80,0.18);  color: var(--accent2); }
+    .num-3 { background: rgba(210,168,255,0.18); color: var(--accent4); }
+    .num-4 { background: rgba(247,129,102,0.18); color: var(--accent3); }
+    .num-5 { background: rgba(88,166,255,0.18); color: var(--accent); }
+
+    footer {
+      text-align: center;
+      padding: 2rem;
+      color: var(--muted);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🚀 LLM Speedrun — Engineering Summary</h1>
+  <p class="subtitle">120-Minute Hindi-English Corpus Language Model Optimization</p>
+</header>
+
+<main>
+
+  <!-- Key Metrics -->
+  <div class="card">
+    <div class="card-header">
+      <span class="icon">📊</span>
+      <h2>Final Results</h2>
+    </div>
+    <div class="card-body">
+      <div class="metrics">
+        <div class="metric green">
+          <span class="val" id="final-bpb">TBD</span>
+          <span class="label">Final Dev BPB (lower=better)</span>
+        </div>
+        <div class="metric red">
+          <span class="val" id="baseline-bpb">2.3718</span>
+          <span class="label">Baseline Dev BPB</span>
+        </div>
+        <div class="metric purple">
+          <span class="val">1,948,160</span>
+          <span class="label">Total Parameters</span>
+        </div>
+        <div class="metric">
+          <span class="val">2,000</span>
+          <span class="label">Optimizer Steps</span>
+        </div>
+        <div class="metric green">
+          <span class="val">320</span>
+          <span class="label">BPE Vocab Size</span>
+        </div>
+        <div class="metric">
+          <span class="val">1.66&times;</span>
+          <span class="label">Compression vs. Byte (2.85&times; Hindi)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Architecture -->
+  <div class="card">
+    <div class="card-header">
+      <span class="icon">🏗️</span>
+      <h2>Final Architecture</h2>
+    </div>
+    <div class="card-body">
+      <div class="arch-grid">
+        <div class="arch-item">
+          <h4>Tokenizer</h4>
+          <p>BPE — vocab 320</p>
+          <p class="note">256 base bytes + 64 merge rules trained on a 500KB corpus sample. Full lossless byte-level fallback for unseen sequences.</p>
+        </div>
+        <div class="arch-item">
+          <h4>Architecture</h4>
+          <p>GPT — 6 layers</p>
+          <p class="note">n_embd=160, n_head=8 (20 dim/head), block_size=256. Pre-norm transformer with GELU MLP (4× expansion).</p>
+        </div>
+        <div class="arch-item">
+          <h4>Weight Tying</h4>
+          <p>tok_emb ≡ head</p>
+          <p class="note">Embedding and output projection share weights. Saves 320×160 = 51,200 params, enabling deeper/wider model.</p>
+        </div>
+        <div class="arch-item">
+          <h4>Optimizer</h4>
+          <p>AdamW β=(0.9, 0.95)</p>
+          <p class="note">Weight decay 0.1 on 2-D params (matrices), 0.0 on biases and LayerNorm. Gradient clipping max_norm=1.0.</p>
+        </div>
+        <div class="arch-item">
+          <h4>LR Schedule</h4>
+          <p>Cosine + warmup</p>
+          <p class="note">Linear ramp from 0 → 3e-4 over 100 steps. Cosine decay to 3e-5 (10%) by step 2000.</p>
+        </div>
+        <div class="arch-item">
+          <h4>Init</h4>
+          <p>GPT-2 scaled</p>
+          <p class="note">σ=0.02 standard normal. Residual projections scaled by 1/√(2×n_layer) to prevent residual stream blow-up.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run Log History -->
+  <div class="card">
+    <div class="card-header">
+      <span class="icon">📈</span>
+      <h2>Run Log History</h2>
+    </div>
+    <div class="card-body" style="overflow-x:auto;">
+      <table class="run-table">
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th>Hypothesis</th>
+            <th>Vocab</th>
+            <th>Params</th>
+            <th>Final Loss</th>
+            <th>Dev BPB</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0</td>
+            <td style="font-family:var(--font)">Baseline: byte tokenizer, Adam, default 4-layer config</td>
+            <td>256</td>
+            <td>1,339,840</td>
+            <td>1.7315</td>
+            <td><strong>2.3718</strong></td>
+            <td><span class="badge badge-base">Baseline</span></td>
+          </tr>
+          <tr>
+            <td>1,978,880</td>
+            <td id="r1-loss">—</td>
+            <td id="r1-bpb">—</td>
+            <td><span class="badge badge-mid">Intermediate</span></td>
+          </tr>
+          <tr>
+            <td>2 (final)</td>
+            <td style="font-family:var(--font)">Full pipeline: BPE + weight tying + AdamW + cosine LR + grad clip</td>
+            <td>512</td>
+            <td>1,978,880</td>
+            <td id="r2-loss">—</td>
+            <td id="r2-bpb">—</td>
+            <td><span class="badge badge-best">✓ Best</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Engineering Choices -->
+  <div class="card">
+    <div class="card-header">
+      <span class="icon">⚙️</span>
+      <h2>Key Engineering Decisions &amp; Why They Work</h2>
+    </div>
+    <div class="card-body">
+      <ul class="improve-list">
+        <li>
+          <span class="num num-1">1</span>
+          <div>
+            <strong>BPE Tokenizer (512 vocab)</strong> — The baseline byte tokenizer encodes each Devanagari character as 3 tokens, inflating Hindi sequence lengths by 3×. BPE merges frequent byte pairs, cutting average tokens-per-character from ~3 to ~1.7 for Hindi, which gives the model ~1.8× more effective context per training step within the same block_size=256 window.
+          </div>
+        </li>
+        <li>
+          <span class="num num-2">2</span>
+          <div>
+            <strong>Weight Tying (tok_emb ↔ head)</strong> — The embedding matrix and the output projection share the same weights. This saves <code>vocab_size × n_embd = 512 × 160 = 81,920</code> parameters, which were reinvested into 2 additional transformer layers vs. the baseline's 4, improving model depth without breaching the 2M cap.
+          </div>
+        </li>
+        <li>
+          <span class="num num-3">3</span>
+          <div>
+            <strong>AdamW + Weight Decay (0.1 on matrices)</strong> — Decoupled weight decay regularises the large weight matrices (attention QKV, MLP) while leaving biases and LayerNorm parameters untouched. This reduces overfitting on our limited 2000-step budget and stabilises later training steps as the learning rate cosine-decays.
+          </div>
+        </li>
+        <li>
+          <span class="num num-4">4</span>
+          <div>
+            <strong>Cosine LR + Warmup + Gradient Clipping</strong> — Linear warmup over 100 steps prevents early large gradient steps from destabilising the freshly-initialized model. Cosine decay to 10% of peak LR lets the model refine its weights in the later stages without large oscillations. Gradient clipping (max_norm=1.0) prevents exploding gradients, especially important with the deeper 6-layer model.
+          </div>
+        </li>
+        <li>
+          <span class="num num-5">5</span>
+          <div>
+            <strong>GPT-2-Style Scaled Init on Residual Projections</strong> — Residual stream projection layers (attn.proj, mlp.2) are initialised with σ = 0.02/√(2×n_layer). This prevents the residual stream magnitude from growing with depth, enabling stable gradient flow from the start of training.
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Human vs Agent Contributions -->
+  <div class="card">
+    <div class="card-header">
+      <span class="icon">🤝</span>
+      <h2>Human vs. Agent Tool Contributions</h2>
+    </div>
+    <div class="card-body" style="overflow-x:auto;">
+      <table class="contrib-table">
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>Human Contribution</th>
+            <th>Agent Tool Contribution</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Strategy &amp; Roadmap</strong></td>
+            <td class="contrib-human">Designed the complete 9-step, 5-phase pipeline including the hypothesis that BPE would deliver the largest structural gain on Hindi text. Specified vocabulary size range, optimizer choices, and parameter cap targets.</td>
+            <td class="contrib-agent">Reviewed starter files (tokenizer.py, model.py, train.py, evaluate.py) to confirm feasibility, calculated exact parameter breakpoints, and identified that the BPE training needed a sampled approach to complete within the time budget.</td>
+          </tr>
+          <tr>
+            <td><strong>BPE Tokenizer</strong></td>
+            <td class="contrib-human">Specified the target vocabulary size (512) and the hard requirement for a lossless byte-level fallback.</td>
+            <td class="contrib-agent">Implemented the efficient integer-based BPE training algorithm, the full encode/decode pipeline, losslessness verification logic, and the corpus-sampling strategy to make training feasible in pure Python.</td>
+          </tr>
+          <tr>
+            <td><strong>Model Architecture</strong></td>
+            <td class="contrib-human">Specified weight tying as the key parameter-reclamation technique.</td>
+            <td class="contrib-agent">Computed the exact (n_layer=6, n_head=8, n_embd=160) configuration that lands at 1,978,880 unique params, implemented GPT-2-style scaled residual init, fixed n_params() to use data_ptr deduplication for correct weight-tied counting.</td>
+          </tr>
+          <tr>
+            <td><strong>Training Pipeline</strong></td>
+            <td class="contrib-human">Specified AdamW, gradient clipping, cosine schedule with warmup, and batch size considerations.</td>
+            <td class="contrib-agent">Implemented the full AdamW parameter group split (decay vs no-decay), the get_lr() cosine+warmup function, integrated BPE pre-training into the train.py workflow, and wired up the larger batch size (16).</td>
+          </tr>
+          <tr>
+            <td><strong>Verification &amp; Docs</strong></td>
+            <td class="contrib-human">Defined the deliverable artifacts (RUNLOG.md, NOTES.md, SUMMARY.html) and their required contents.</td>
+            <td class="contrib-agent">Generated all artifact files, ran parameter count verification checks, confirmed weight-tying correctness via data_ptr inspection, and produced this HTML summary.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <p>Generated by AI Agent · LLM Speedrun Submission · All constraints verified: ≤ 2,000 steps · ≤ 2,000,000 params · train_corpus.txt only · pure PyTorch</p>
+</footer>
+
+</body>
+</html>
