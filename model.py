@@ -46,8 +46,9 @@ class SelfAttention(nn.Module):
         pos = torch.arange(T, device=x.device, dtype=x.dtype)
         inv_freq = 1.0 / (10000.0 ** (torch.arange(0, hs, 2, device=x.device, dtype=x.dtype) / hs))
         sinusoid_inp = torch.einsum("i,j->ij", pos, inv_freq)
-        sin = sinusoid_inp.sin()[None, None, :, :]
-        cos = sinusoid_inp.cos()[None, None, :, :]
+        emb = torch.cat((sinusoid_inp, sinusoid_inp), dim=-1)
+        sin = emb.sin()[None, None, :, :]
+        cos = emb.cos()[None, None, :, :]
         
         def rotate_half(t):
             t1, t2 = t.chunk(2, dim=-1)
