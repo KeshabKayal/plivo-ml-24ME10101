@@ -29,8 +29,8 @@ class SelfAttention(nn.Module):
         super().__init__()
         assert cfg.n_embd % cfg.n_head == 0
         self.n_head = cfg.n_head
-        self.qkv = nn.Linear(cfg.n_embd, 3 * cfg.n_embd)
-        self.proj = nn.Linear(cfg.n_embd, cfg.n_embd)
+        self.qkv = nn.Linear(cfg.n_embd, 3 * cfg.n_embd, bias=False)
+        self.proj = nn.Linear(cfg.n_embd, cfg.n_embd, bias=False)
         self.drop = nn.Dropout(cfg.dropout)
 
     def forward(self, x):
@@ -40,6 +40,22 @@ class SelfAttention(nn.Module):
         q = q.view(B, T, nh, C // nh).transpose(1, 2)
         k = k.view(B, T, nh, C // nh).transpose(1, 2)
         v = v.view(B, T, nh, C // nh).transpose(1, 2)
+
+        # Apply RoPE
+        hs = C // nh
+        pos = torch.arange(T, device=x.device, dtype=x.dtype)
+        inv_freq = 1.0 / (10000.0 ** (torch.arange(0, hs, 2, device=x.device, dtype=x.dtype) / hs))
+        sinusoid_inp = torch.einsum("i,j->ij", pos, inv_freq)
+        sin = sinusoid_inp.sin()[None, None, :, :]
+        cos = sinusoid_inp.cos()[None, None, :, :]
+        
+        def rotate_half(t):
+            t1, t2 = t.chunk(2, dim=-1)
+            return torch.cat((-t2, t1), dim=-1)
+            
+        q = (q * cos) + (rotate_half(q) * sin)
+        k = (k * cos) + (rotate_half(k) * sin)
+
         y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         return self.drop(self.proj(y))
@@ -52,9 +68,9 @@ class Block(nn.Module):
         self.attn = SelfAttention(cfg)
         self.ln2 = nn.LayerNorm(cfg.n_embd)
         self.mlp = nn.Sequential(
-            nn.Linear(cfg.n_embd, 4 * cfg.n_embd),
+            nn.Linear(cfg.n_embd, 4 * cfg.n_embd, bias=False),
             nn.GELU(),
-            nn.Linear(4 * cfg.n_embd, cfg.n_embd),
+            nn.Linear(4 * cfg.n_embd, cfg.n_embd, bias=False),
             nn.Dropout(cfg.dropout),
         )
 
@@ -69,7 +85,6 @@ class GPT(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.tok_emb = nn.Embedding(cfg.vocab_size, cfg.n_embd)
-        self.pos_emb = nn.Embedding(cfg.block_size, cfg.n_embd)
         self.drop = nn.Dropout(cfg.dropout)
         self.blocks = nn.ModuleList(Block(cfg) for _ in range(cfg.n_layer))
         self.ln_f = nn.LayerNorm(cfg.n_embd)
@@ -96,8 +111,7 @@ class GPT(nn.Module):
         assert (
             T <= self.cfg.block_size
         ), f"Sequence length {T} > block_size {self.cfg.block_size}"
-        pos = torch.arange(T, device=idx.device)
-        x = self.drop(self.tok_emb(idx) + self.pos_emb(pos)[None, :, :])
+        x = self.drop(self.tok_emb(idx))
         for blk in self.blocks:
             x = blk(x)
         logits = self.head(self.ln_f(x))

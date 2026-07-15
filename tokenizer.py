@@ -27,7 +27,7 @@ import numpy as np
 
 VOCAB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bpe_vocab.json")
 TARGET_VOCAB = (
-    320  # 256 base bytes + 64 merge rules (fast to apply, good Hindi compression)
+    512  # 256 base bytes + 256 merge rules (better Hindi compression, larger vocab_size)
 )
 
 
@@ -211,15 +211,8 @@ class BPETokenizer:
         raw = text.encode("utf-8")
         if len(raw) <= 50_000:
             return self._encode_python(raw)
-        # Split large texts into 50KB chunks at byte boundaries and encode each
-        # independently. BPE is applied independently per chunk, which loses
-        # cross-boundary merges, but this is a small effect (only at boundaries).
-        CHUNK = 50_000
-        result = []
-        for start in range(0, len(raw), CHUNK):
-            chunk = raw[start : start + CHUNK]
-            result.extend(self._encode_python(chunk))
-        return result
+        # Use numpy for large arrays
+        return self._encode_numpy(raw).tolist()
 
     def decode(self, ids: list) -> str:
         """Decode a list of token IDs back to a UTF-8 string (lossless)."""

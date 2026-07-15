@@ -82,7 +82,7 @@ def main():
     ap.add_argument("--data", required=True)
     ap.add_argument("--steps", type=int, default=2000)
     ap.add_argument("--batch", type=int, default=4)
-    ap.add_argument("--lr", type=float, default=3e-4)
+    ap.add_argument("--lr", type=float, default=6e-4)
     ap.add_argument("--warmup", type=int, default=100)
     ap.add_argument("--seed", type=int, default=1337)
     ap.add_argument("--out", default="ckpt.pt")
@@ -155,14 +155,20 @@ def main():
         for pg in opt.param_groups:
             pg["lr"] = lr
 
-        x, y = get_batch(ids, cfg.block_size, args.batch, device)
-        _, loss = model(x, y)
         opt.zero_grad(set_to_none=True)
-        loss.backward()
+        accum_steps = 8
+        loss_accum = 0.0
+        for micro_step in range(accum_steps):
+            x, y = get_batch(ids, cfg.block_size, args.batch, device)
+            _, loss = model(x, y)
+            loss = loss / accum_steps
+            loss.backward()
+            loss_accum += loss.item()
+            
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         opt.step()
 
-        losses.append(loss.item())
+        losses.append(loss_accum)
         if step % args.log_every == 0 or step == 1:
             window = losses[-args.log_every :]
             avg = sum(window) / len(window)
